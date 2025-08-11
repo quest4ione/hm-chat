@@ -1,0 +1,14 @@
+[package]
+name = "hm-chat"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+reqwest = { version = "0.12.18", default-features = false }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+serde_json = { version = "1.0.140", default-features = false }
+
+[features]
+default = ["std"]
+std = ["serde_json/std"]
+alloc = ["serde_json/alloc"]

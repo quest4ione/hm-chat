@@ -6,52 +6,28 @@ use std::{
 
 use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum ApiError {
-    InvalidValue {
-        field: String,
-        msg: String,
-    },
-    RateLimited {
-        count: u8,
-        duration: Duration,
-    },
+    #[error("invalid value for field {field}:  {msg}")]
+    InvalidValue { field: String, msg: String },
+    #[error("rate limit exceeded: {count} per {}", duration.as_millis())]
+    RateLimited { count: u8, duration: Duration },
+    #[error("invalid or expired token")]
     Unauthorized,
+    #[error("unknown error({code}): {}", msg.clone().unwrap_or("".to_string()))]
     Unknown {
         code: StatusCode,
         msg: Option<String>,
     },
 }
 
-impl Display for ApiError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidValue { field, msg } => {
-                write!(f, "Invalid value for field {field}: {msg}")
-            }
-            Self::RateLimited { count, duration } => write!(
-                f,
-                "Sending requests too fast: {count} per {}s",
-                duration.as_secs_f64()
-            ),
-            Self::Unauthorized => write!(f, "Invalid or expired authorization"),
-            Self::Unknown { code, msg } => write!(
-                f,
-                "Unknown error ({code}): {}",
-                msg.as_deref().unwrap_or("")
-            ),
-        }
-    }
-}
-
-impl std::error::Error for ApiError {}
-
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    Api(ApiError),
-    Reqwest(reqwest::Error),
-    Json(serde_json::Error),
+    Api(#[from] ApiError),
+    Reqwest(#[from] reqwest::Error),
+    Json(#[from] serde_json::Error),
 }
 
 impl Display for Error {
@@ -60,28 +36,6 @@ impl Display for Error {
             Self::Api(e) => write!(f, "ApiError: {e}"),
             Self::Reqwest(e) => write!(f, "ReqwestError: {e}"),
             Self::Json(e) => write!(f, "JsonError: {e}"),
-        }
-    }
-}
-
-impl From<reqwest::Error> for Error {
-    fn from(value: reqwest::Error) -> Self {
-        Self::Reqwest(value)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(value: serde_json::Error) -> Self {
-        Self::Json(value)
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Reqwest(e) => Some(e),
-            Self::Json(e) => Some(e),
-            _ => None,
         }
     }
 }

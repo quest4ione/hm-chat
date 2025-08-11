@@ -437,16 +437,16 @@ mod tests {
 
     #[test]
     fn raw_response_success() {
-        let input = json!({"ok": true}).to_string();
-        let res: RawResponse<TestResponse> = serde_json::from_str(&input).unwrap();
+        let input = json!({"ok": true});
+        let res: RawResponse<TestResponse> = serde_json::from_value(input).unwrap();
 
         assert!(matches!(res, RawResponse::Success(TestResponse {})));
     }
 
     #[test]
     fn raw_response_failure() {
-        let input = json!({"ok": false, "msg": "an error occured"}).to_string();
-        let res: RawResponse<TestResponse> = serde_json::from_str(&input).unwrap();
+        let input = json!({"ok": false, "msg": "an error occured"});
+        let res: RawResponse<TestResponse> = serde_json::from_value(input).unwrap();
 
         assert!(matches!(res, RawResponse::Failure(msg) if msg == "an error occured"));
     }

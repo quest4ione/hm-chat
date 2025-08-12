@@ -10,7 +10,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    Api(#[from] ApiError),
+    ApiFailure(#[from] ApiFailureError),
     Reqwest(#[from] reqwest::Error),
     Json(#[from] serde_json::Error),
 }
@@ -18,7 +18,7 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Api(e) => write!(f, "ApiError: {e}"),
+            Self::ApiFailure(e) => write!(f, "ApiError: {e}"),
             Self::Reqwest(e) => write!(f, "ReqwestError: {e}"),
             Self::Json(e) => write!(f, "JsonError: {e}"),
         }
@@ -26,18 +26,12 @@ impl Display for Error {
 }
 
 #[derive(Error, Debug)]
-pub enum ApiError {
+pub enum ApiFailureError {
     #[error("invalid value for field {field}:  {msg}")]
-    InvalidValue {
-        field: String,
-        msg: String,
-    },
+    InvalidValue { field: String, msg: String },
 
     #[error("rate limit exceeded: {count} per {}", duration.as_millis())]
-    RateLimited {
-        count: u8,
-        duration: Duration,
-    },
+    Ratelimited { count: u8, duration: Duration },
 
     #[error("invalid or expired token")]
     Unauthorized,
@@ -50,12 +44,12 @@ pub enum ApiError {
 }
 
 #[derive(Debug)]
-enum RawResponse<T> {
+enum BaseResponse<T> {
     Success(T),
     Failure(String),
 }
 
-impl<'de, T> Deserialize<'de> for RawResponse<T>
+impl<'de, T> Deserialize<'de> for BaseResponse<T>
 where
     T: Deserialize<'de>,
 {
@@ -64,13 +58,13 @@ where
         D: serde::Deserializer<'de>,
     {
         #[derive(Debug, Deserialize)]
-        struct Helper {
+        struct RawResponse {
             ok: bool,
             #[serde(flatten)]
             data: serde_json::Map<String, serde_json::Value>,
         }
 
-        let raw = Helper::deserialize(deserializer)?;
+        let raw = RawResponse::deserialize(deserializer)?;
 
         if raw.ok {
             T::deserialize(raw.data)
@@ -95,7 +89,7 @@ pub trait Endpoint: Serialize {
 
     type Response: DeserializeOwned;
 
-    fn create_request(&self, client: &reqwest::Client) -> Result<reqwest::Request, Error> {
+    fn request(&self, client: &reqwest::Client) -> Result<reqwest::Request, Error> {
         Ok(client
             .request(Self::METHOD, Self::URL)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -108,26 +102,31 @@ pub trait Endpoint: Serialize {
         let code = res.status();
         let body = res.text().await?;
 
-        let raw_response: serde_json::Result<RawResponse<Self::Response>> =
+        let raw_response: serde_json::Result<BaseResponse<Self::Response>> =
             serde_json::from_str(&body);
 
         match raw_response {
-            Ok(RawResponse::Success(val)) if code.is_success() => Ok(val),
-            Ok(RawResponse::Success(_)) => Err(Error::Api(Self::map_error(code, None))),
-            Ok(RawResponse::Failure(msg)) => Err(Error::Api(Self::map_error(code, Some(msg)))),
-            Err(e) => Err(Error::Api(Self::map_error(code, Some(e.to_string())))),
+            Ok(BaseResponse::Success(val)) if code.is_success() => Ok(val),
+            Ok(BaseResponse::Success(_)) => Err(Error::ApiFailure(Self::map_error(code, None))),
+            Ok(BaseResponse::Failure(msg)) => {
+                Err(Error::ApiFailure(Self::map_error(code, Some(msg))))
+            }
+            Err(e) => Err(Error::ApiFailure(Self::map_error(
+                code,
+                Some(e.to_string()),
+            ))),
         }
     }
 
     #[allow(async_fn_in_trait)]
     async fn send(&self, client: &reqwest::Client) -> Result<Self::Response, Error> {
-        let req = self.create_request(client)?;
+        let req = self.request(client)?;
         let res = client.execute(req).await?;
 
         Self::deserialize_response(res).await
     }
 
-    fn map_error(code: StatusCode, msg: Option<String>) -> ApiError;
+    fn map_error(code: StatusCode, msg: Option<String>) -> ApiFailureError;
 }
 
 #[derive(Serialize, Debug)]
@@ -153,15 +152,15 @@ impl Endpoint for GetTokenRequest {
 
     type Response = GetTokenResponse;
 
-    fn map_error(code: StatusCode, msg: Option<String>) -> ApiError {
+    fn map_error(code: StatusCode, msg: Option<String>) -> ApiFailureError {
         match (code, msg) {
             (StatusCode::UNAUTHORIZED, Some(msg)) if msg == "expired or invalid pass" => {
-                ApiError::InvalidValue {
+                ApiFailureError::InvalidValue {
                     field: "pass".to_string(),
                     msg,
                 }
             }
-            (code, msg) => ApiError::Unknown { code, msg },
+            (code, msg) => ApiFailureError::Unknown { code, msg },
         }
     }
 }
@@ -189,24 +188,24 @@ impl Endpoint for AccountDataRequest {
 
     type Response = AccountDataResponse;
 
-    fn map_error(code: StatusCode, msg: Option<String>) -> ApiError {
+    fn map_error(code: StatusCode, msg: Option<String>) -> ApiFailureError {
         match (code, msg) {
             (StatusCode::TOO_MANY_REQUESTS, Some(msg))
                 if msg == "token pollrate exceeded - 1 per 4500ms" =>
             {
-                ApiError::RateLimited {
+                ApiFailureError::Ratelimited {
                     count: 1,
                     duration: Duration::from_secs(5),
                 }
             }
-            (StatusCode::UNAUTHORIZED, None) => ApiError::Unauthorized,
-            (code, msg) => ApiError::Unknown { code, msg },
+            (StatusCode::UNAUTHORIZED, None) => ApiFailureError::Unauthorized,
+            (code, msg) => ApiFailureError::Unknown { code, msg },
         }
     }
 }
 
 #[derive(Serialize, Debug)]
-pub struct ChatsRequest {
+pub struct GetChatsRequest {
     #[serde(rename = "chat_token")]
     token: String,
     usernames: Vec<String>,
@@ -214,7 +213,7 @@ pub struct ChatsRequest {
     after: Option<f64>,
 }
 
-impl ChatsRequest {
+impl GetChatsRequest {
     pub fn before(token: String, usernames: Vec<String>, before: SystemTime) -> Self {
         Self {
             token,
@@ -240,30 +239,30 @@ impl ChatsRequest {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ChatsResponse {
+pub struct GetChatsResponse {
     pub chats: HashMap<String, Vec<Message>>,
 }
 
-impl Endpoint for ChatsRequest {
+impl Endpoint for GetChatsRequest {
     const URL: &'static str = "https://www.hackmud.com/mobile/chats.json";
     const METHOD: Method = Method::POST;
 
-    type Response = ChatsResponse;
+    type Response = GetChatsResponse;
 
-    fn map_error(code: StatusCode, msg: Option<String>) -> ApiError {
+    fn map_error(code: StatusCode, msg: Option<String>) -> ApiFailureError {
         match (code, msg) {
             // this shouldnt happen as there's always exactly one of before/after
             // unless the server checks more than that, which i think it doesnt...
             (StatusCode::FORBIDDEN, Some(msg))
                 if msg == "no valid before or after timestamp was provided" =>
             {
-                ApiError::InvalidValue {
+                ApiFailureError::InvalidValue {
                     field: "before | after".to_string(),
                     msg,
                 }
             }
             (StatusCode::FORBIDDEN, Some(msg)) if msg == "no valid usernames were provided" => {
-                ApiError::InvalidValue {
+                ApiFailureError::InvalidValue {
                     field: "usernames".to_string(),
                     msg,
                 }
@@ -271,13 +270,13 @@ impl Endpoint for ChatsRequest {
             (StatusCode::TOO_MANY_REQUESTS, Some(msg))
                 if msg == "token pollrate exceeded - 1 per 700ms" =>
             {
-                ApiError::RateLimited {
+                ApiFailureError::Ratelimited {
                     count: 1,
                     duration: Duration::from_millis(700),
                 }
             }
-            (StatusCode::UNAUTHORIZED, None) => ApiError::Unauthorized,
-            (code, msg) => ApiError::Unknown { code, msg },
+            (StatusCode::UNAUTHORIZED, None) => ApiFailureError::Unauthorized,
+            (code, msg) => ApiFailureError::Unknown { code, msg },
         }
     }
 }
@@ -394,28 +393,28 @@ impl Endpoint for CreateChatRequest {
 
     type Response = CreateChatResponse;
 
-    fn map_error(code: StatusCode, msg: Option<String>) -> ApiError {
+    fn map_error(code: StatusCode, msg: Option<String>) -> ApiFailureError {
         match (code, msg) {
             (StatusCode::FORBIDDEN, Some(msg)) if msg == "sending messages too fast" => {
-                ApiError::RateLimited {
+                ApiFailureError::Ratelimited {
                     count: 5,
                     duration: Duration::from_secs(20),
                 }
             }
             (StatusCode::FORBIDDEN, Some(msg)) if msg == "channel doesn't exist" => {
-                ApiError::InvalidValue {
+                ApiFailureError::InvalidValue {
                     field: "channel".to_string(),
                     msg,
                 }
             }
             (StatusCode::FORBIDDEN, Some(msg)) if msg == "user doesn't exist" => {
-                ApiError::InvalidValue {
+                ApiFailureError::InvalidValue {
                     field: "from".to_string(),
                     msg,
                 }
             }
             (StatusCode::FORBIDDEN, Some(msg)) if msg == "tell user doesn't exist" => {
-                ApiError::InvalidValue {
+                ApiFailureError::InvalidValue {
                     field: "to".to_string(),
                     msg,
                 }
@@ -423,19 +422,19 @@ impl Endpoint for CreateChatRequest {
             (StatusCode::FORBIDDEN, Some(msg))
                 if msg == "msg too long or too many newlines (1000/10)" =>
             {
-                ApiError::InvalidValue {
+                ApiFailureError::InvalidValue {
                     field: "msg".to_string(),
                     msg,
                 }
             }
             (StatusCode::FORBIDDEN, Some(msg)) if msg == "must provide a msg" => {
-                ApiError::InvalidValue {
+                ApiFailureError::InvalidValue {
                     field: "msg".to_string(),
                     msg,
                 }
             }
-            (StatusCode::UNAUTHORIZED, None) => ApiError::Unauthorized,
-            (code, msg) => ApiError::Unknown { code, msg },
+            (StatusCode::UNAUTHORIZED, None) => ApiFailureError::Unauthorized,
+            (code, msg) => ApiFailureError::Unknown { code, msg },
         }
     }
 }
@@ -453,17 +452,17 @@ mod tests {
     #[test]
     fn raw_response_success() {
         let input = json!({"ok": true});
-        let res: RawResponse<TestResponse> = serde_json::from_value(input).unwrap();
+        let res: BaseResponse<TestResponse> = serde_json::from_value(input).unwrap();
 
-        assert!(matches!(res, RawResponse::Success(TestResponse {})));
+        assert!(matches!(res, BaseResponse::Success(TestResponse {})));
     }
 
     #[test]
     fn raw_response_failure() {
         let input = json!({"ok": false, "msg": "an error occured"});
-        let res: RawResponse<TestResponse> = serde_json::from_value(input).unwrap();
+        let res: BaseResponse<TestResponse> = serde_json::from_value(input).unwrap();
 
-        assert!(matches!(res, RawResponse::Failure(msg) if msg == "an error occured"));
+        assert!(matches!(res, BaseResponse::Failure(msg) if msg == "an error occured"));
     }
 
     // TODO: test EVERYTHING

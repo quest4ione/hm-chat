@@ -311,7 +311,7 @@ impl<'de> Deserialize<'de> for Message {
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        pub struct Helper {
+        pub struct RawMessage {
             pub id: String,
             pub t: f64,
             pub channel: Option<String>,
@@ -323,7 +323,7 @@ impl<'de> Deserialize<'de> for Message {
             pub is_leave: bool,
         }
 
-        let raw = Helper::deserialize(deserializer)?;
+        let raw = RawMessage::deserialize(deserializer)?;
 
         if let Some(channel) = raw.channel {
             let action = match (raw.is_join, raw.is_leave) {

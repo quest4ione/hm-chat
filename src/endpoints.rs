@@ -226,7 +226,7 @@ impl ChatsRequest {
 
 #[derive(Deserialize, Debug)]
 pub struct ChatsResponse {
-    pub chats: HashMap<String, Vec<RawMessage>>,
+    pub chats: HashMap<String, Vec<Message>>,
 }
 
 impl Endpoint for ChatsRequest {
@@ -268,7 +268,7 @@ impl Endpoint for ChatsRequest {
 }
 
 #[derive(Debug)]
-pub struct RawMessage {
+pub struct Message {
     pub id: String,
     pub t: f64,
     pub from_user: String,
@@ -291,7 +291,7 @@ pub enum ChannelAction {
     Leave,
 }
 
-impl<'de> Deserialize<'de> for RawMessage {
+impl<'de> Deserialize<'de> for Message {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,

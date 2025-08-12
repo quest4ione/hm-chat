@@ -43,7 +43,7 @@ pub enum ApiFailureError {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum BaseResponse<T> {
     Success(T),
     Failure(String),
@@ -129,7 +129,7 @@ pub trait Endpoint: Serialize {
     fn map_error(code: StatusCode, msg: Option<String>) -> ApiFailureError;
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GetTokenRequest {
     pass: String,
 }
@@ -140,7 +140,7 @@ impl GetTokenRequest {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GetTokenResponse {
     #[serde(rename = "chat_token")]
     pub token: String,
@@ -165,7 +165,7 @@ impl Endpoint for GetTokenRequest {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AccountDataRequest {
     #[serde(rename = "chat_token")]
     token: String,
@@ -177,7 +177,7 @@ impl AccountDataRequest {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AccountDataResponse {
     pub users: HashMap<String, HashMap<String, Vec<String>>>,
 }
@@ -204,7 +204,7 @@ impl Endpoint for AccountDataRequest {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone, PartialEq, PartialOrd)]
 pub struct GetChatsRequest {
     #[serde(rename = "chat_token")]
     token: String,
@@ -238,7 +238,7 @@ impl GetChatsRequest {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct GetChatsResponse {
     pub chats: HashMap<String, Vec<Message>>,
 }
@@ -281,7 +281,7 @@ impl Endpoint for GetChatsRequest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Message {
     pub id: String,
     pub t: f64,
@@ -290,7 +290,7 @@ pub struct Message {
     pub message_type: MessageType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MessageType {
     Tell,
     Send {
@@ -299,7 +299,7 @@ pub enum MessageType {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ChannelAction {
     Join,
     Leave,
@@ -350,7 +350,7 @@ impl<'de> Deserialize<'de> for Message {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CreateChatRequest {
     #[serde(rename = "chat_token")]
     token: String,
@@ -384,7 +384,7 @@ impl CreateChatRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CreateChatResponse {}
 
 impl Endpoint for CreateChatRequest {

@@ -89,7 +89,7 @@ pub trait Endpoint: Serialize {
 
     type Response: DeserializeOwned;
 
-    fn request(&self, client: &reqwest::Client) -> Result<reqwest::Request, Error> {
+    fn to_request(&self, client: &reqwest::Client) -> Result<reqwest::Request, Error> {
         Ok(client
             .request(Self::METHOD, Self::URL)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -120,7 +120,7 @@ pub trait Endpoint: Serialize {
 
     #[allow(async_fn_in_trait)]
     async fn send(&self, client: &reqwest::Client) -> Result<Self::Response, Error> {
-        let req = self.request(client)?;
+        let req = self.to_request(client)?;
         let res = client.execute(req).await?;
 
         Self::deserialize_response(res).await

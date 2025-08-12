@@ -69,7 +69,7 @@ where
         if raw.ok {
             T::deserialize(raw.data)
                 .map(Self::Success)
-                .map_err(serde::de::Error::custom) // TODO: this can probably be better but types hurt my brain
+                .map_err(serde::de::Error::custom)
         } else {
             #[derive(Deserialize)]
             struct ErrorMsg {
@@ -78,7 +78,7 @@ where
 
             ErrorMsg::deserialize(raw.data)
                 .map(|err| Self::Failure(err.msg))
-                .map_err(serde::de::Error::custom) // TODO: this can probably be better but types hurt my brain
+                .map_err(serde::de::Error::custom)
         }
     }
 }

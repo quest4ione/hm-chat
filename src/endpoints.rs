@@ -9,21 +9,6 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum ApiError {
-    #[error("invalid value for field {field}:  {msg}")]
-    InvalidValue { field: String, msg: String },
-    #[error("rate limit exceeded: {count} per {}", duration.as_millis())]
-    RateLimited { count: u8, duration: Duration },
-    #[error("invalid or expired token")]
-    Unauthorized,
-    #[error("unknown error({code}): {}", msg.clone().unwrap_or("".to_string()))]
-    Unknown {
-        code: StatusCode,
-        msg: Option<String>,
-    },
-}
-
-#[derive(Error, Debug)]
 pub enum Error {
     Api(#[from] ApiError),
     Reqwest(#[from] reqwest::Error),
@@ -38,6 +23,30 @@ impl Display for Error {
             Self::Json(e) => write!(f, "JsonError: {e}"),
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum ApiError {
+    #[error("invalid value for field {field}:  {msg}")]
+    InvalidValue {
+        field: String,
+        msg: String,
+    },
+
+    #[error("rate limit exceeded: {count} per {}", duration.as_millis())]
+    RateLimited {
+        count: u8,
+        duration: Duration,
+    },
+
+    #[error("invalid or expired token")]
+    Unauthorized,
+
+    #[error("unknown error({code}): {}", msg.clone().unwrap_or("".to_string()))]
+    Unknown {
+        code: StatusCode,
+        msg: Option<String>,
+    },
 }
 
 #[derive(Debug)]

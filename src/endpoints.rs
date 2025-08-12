@@ -93,7 +93,7 @@ pub trait Endpoint: Serialize {
         Ok(client
             .request(Self::METHOD, Self::URL)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(serde_json::to_string(self)?)
+            .body(serde_json::to_vec(&self)?)
             .build()?)
     }
 

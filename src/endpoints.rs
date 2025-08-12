@@ -83,7 +83,7 @@ where
     }
 }
 
-pub trait Endpoint: Serialize {
+pub trait Request: Serialize {
     const URL: &'static str;
     const METHOD: Method;
 
@@ -146,7 +146,7 @@ pub struct GetTokenResponse {
     pub token: String,
 }
 
-impl Endpoint for GetTokenRequest {
+impl Request for GetTokenRequest {
     const URL: &'static str = "https://www.hackmud.com/mobile/get_token.json";
     const METHOD: Method = Method::POST;
 
@@ -182,7 +182,7 @@ pub struct AccountDataResponse {
     pub users: HashMap<String, HashMap<String, Vec<String>>>,
 }
 
-impl Endpoint for AccountDataRequest {
+impl Request for AccountDataRequest {
     const URL: &'static str = "https://www.hackmud.com/mobile/account_data.json";
     const METHOD: Method = Method::POST;
 
@@ -243,7 +243,7 @@ pub struct GetChatsResponse {
     pub chats: HashMap<String, Vec<Message>>,
 }
 
-impl Endpoint for GetChatsRequest {
+impl Request for GetChatsRequest {
     const URL: &'static str = "https://www.hackmud.com/mobile/chats.json";
     const METHOD: Method = Method::POST;
 
@@ -387,7 +387,7 @@ impl CreateChatRequest {
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CreateChatResponse {}
 
-impl Endpoint for CreateChatRequest {
+impl Request for CreateChatRequest {
     const URL: &'static str = "https://www.hackmud.com/mobile/create_chat.json";
     const METHOD: Method = Method::POST;
 

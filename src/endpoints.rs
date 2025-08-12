@@ -95,21 +95,27 @@ pub trait Endpoint: Serialize {
     }
 
     #[allow(async_fn_in_trait)]
-    async fn send(&self, client: &reqwest::Client) -> Result<Self::Response, Error> {
-        let req = self.create_request(client)?;
-        let raw = client.execute(req).await?;
+    async fn deserialize_response(res: reqwest::Response) -> Result<Self::Response, Error> {
+        let code = res.status();
+        let body = res.text().await?;
 
-        let code = raw.status();
-        let body = raw.text().await?;
+        let raw_response: serde_json::Result<RawResponse<Self::Response>> =
+            serde_json::from_str(&body);
 
-        let res: serde_json::Result<RawResponse<Self::Response>> = serde_json::from_str(&body);
-
-        match res {
+        match raw_response {
             Ok(RawResponse::Success(val)) if code.is_success() => Ok(val),
             Ok(RawResponse::Success(_)) => Err(Error::Api(Self::map_error(code, None))),
             Ok(RawResponse::Failure(msg)) => Err(Error::Api(Self::map_error(code, Some(msg)))),
             Err(e) => Err(Error::Api(Self::map_error(code, Some(e.to_string())))),
         }
+    }
+
+    #[allow(async_fn_in_trait)]
+    async fn send(&self, client: &reqwest::Client) -> Result<Self::Response, Error> {
+        let req = self.create_request(client)?;
+        let res = client.execute(req).await?;
+
+        Self::deserialize_response(res).await
     }
 
     fn map_error(code: StatusCode, msg: Option<String>) -> ApiError;
